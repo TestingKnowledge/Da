@@ -3,8 +3,29 @@ from discord.ext import commands
 import os
 import tempfile
 import asyncio
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from config import DISCORD_TOKEN, MAX_UPLOAD_BYTES
 from deobfuscator.pipeline import DeobfuscationPipeline
+
+# --- DUMMY SERVER FOR RENDER FREE TIER ---
+class PingHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Deobfuscator Bot is online!")
+        
+    def log_message(self, format, *args):
+        pass # Keeps your logs clean
+
+def keep_alive():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), PingHandler)
+    server.serve_forever()
+
+# Start the dummy web server in the background
+threading.Thread(target=keep_alive, daemon=True).start()
+# -----------------------------------------
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -43,7 +64,6 @@ async def deobfuscate(ctx):
             with open(input_path, "r", encoding="utf-8") as f:
                 source = f.read()
 
-            # Run pipeline in a thread to avoid blocking the async event loop
             pipeline = DeobfuscationPipeline()
             result = await asyncio.to_thread(pipeline.run, source)
 
@@ -72,4 +92,3 @@ if __name__ == "__main__":
     if not DISCORD_TOKEN:
         raise ValueError("DISCORD_TOKEN environment variable is not set.")
     bot.run(DISCORD_TOKEN)
- 
