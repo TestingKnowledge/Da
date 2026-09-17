@@ -30,7 +30,30 @@ class FunctionCall(Node):
         self.func = func
         self.args = args
 
-class UnknownNode(Node):
-    def __init__(self, raw_tokens):
-        self.raw = raw_tokens
+# --- NEW STRUCTURES ---
+class IfStatement(Node):
+    def __init__(self, condition, if_body, else_body=None):
+        self.condition = condition
+        self.if_body = if_body
+        self.else_body = else_body
 
+class WhileLoop(Node):
+    def __init__(self, condition, body):
+        self.condition = condition
+        self.body = body
+
+class ForLoop(Node):
+    def __init__(self, target, start, end, step, body):
+        self.target = target
+        self.start = start
+        self.end = end
+        self.step = step
+        self.body = body
+
+class TableConstructor(Node):
+    def __init__(self, fields):
+        self.fields = fields # List of expressions
+
+class ReturnStatement(Node):
+    def __init__(self, values):
+        self.values = values
