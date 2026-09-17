@@ -3,33 +3,33 @@ from discord.ext import commands
 import os
 import tempfile
 import asyncio
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from aiohttp import web
 from config import DISCORD_TOKEN, MAX_UPLOAD_BYTES
 from deobfuscator.pipeline import DeobfuscationPipeline
 
-# --- DUMMY SERVER FOR RENDER FREE TIER ---
-class PingHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Deobfuscator Bot is online!")
-        
-    def log_message(self, format, *args):
-        pass # Keeps your logs clean
+# --- DUMMY SERVER (ASYNC METHOD) ---
+async def handle_ping(request):
+    return web.Response(text="Deobfuscator Bot is online!")
 
-def keep_alive():
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
     port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), PingHandler)
-    server.serve_forever()
-
-# Start the dummy web server in the background
-threading.Thread(target=keep_alive, daemon=True).start()
-# -----------------------------------------
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"Dummy web server started on port {port}")
+# -----------------------------------
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intents)
+
+@bot.event
+async def setup_hook():
+    # Start the web server at the exact same time the bot connects
+    bot.loop.create_task(start_web_server())
 
 @bot.event
 async def on_ready():
