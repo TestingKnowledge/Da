@@ -1,9 +1,11 @@
+import time
 from .ast import *
 
 class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
+        self.start_time = time.time()
 
     def peek(self):
         return self.tokens[self.pos] if self.pos < len(self.tokens) else None
@@ -18,16 +20,21 @@ class Parser:
     def parse(self):
         stmts = []
         while self.peek():
+            # HARD TIMEOUT: Stop parsing if it takes more than 10 seconds to prevent Discord freezes
+            if time.time() - self.start_time > 10:
+                break
+                
             stmt = self.parse_statement()
             if stmt:
                 stmts.append(stmt)
             else:
-                self.pos += 1 # Skip unparseable to allow partial recovery
+                self.pos += 1 # Skip unparseable junk to allow partial recovery
         return Block(stmts)
 
     def parse_statement(self):
         if self.consume('KEYWORD', 'local'):
             return self.parse_assignment(is_local=True)
+            
         # Attempt standard assignment
         saved = self.pos
         ident = self.consume('IDENT')
@@ -85,17 +92,24 @@ class Parser:
             return Literal(float(tok.value) if '.' in tok.value else int(tok.value), 'NUMBER')
         elif tok.type == 'STRING':
             self.pos += 1
-            return Literal(tok.value, 'STRING') # keeping quotes for simplicity
+            return Literal(tok.value, 'STRING') 
         elif tok.type == 'IDENT':
             self.pos += 1
             ident = Identifier(tok.value)
             if self.consume('PUNC', '('):
                 args = []
-                while not self.consume('PUNC', ')'):
+                while self.peek() and not self.consume('PUNC', ')'):
+                    start_pos = self.pos # Track position to prevent infinite loops
+                    
                     arg = self.parse_expression()
                     if arg: args.append(arg)
+                    
                     self.consume('PUNC', ',')
+                    
+                    # CRITICAL FIX: If we failed to parse an argument, force forward so it never freezes
+                    if self.pos == start_pos:
+                        self.pos += 1
+                        
                 return FunctionCall(ident, args)
             return ident
         return None
-
