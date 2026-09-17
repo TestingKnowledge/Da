@@ -35,13 +35,13 @@ class Lexer:
                 match = regex.match(self.source, pos)
                 if match:
                     val = match.group(0)
-                    if name not in ['SPACE', 'COMMENT']:
-                        if name == 'MISMATCH':
-                            continue # Ignore invalid tokens gracefully for partial recovery
+                    
+                    # FIXED: Safely ignore spaces, comments, and mismatched characters
+                    if name not in ['SPACE', 'COMMENT', 'MISMATCH']:
                         self.tokens.append(Token(name, val, line))
+                        
                     line += val.count('\n')
-                    pos = match.end(0)
+                    pos = match.end(0) # Now it properly moves forward!
                     break
             if not match:
                 pos += 1 # Fallback safeguard
-
