@@ -22,49 +22,58 @@ class SymbolicEvaluator:
 
         elif isinstance(node, Assignment):
             eval_vals = [self.evaluate(v, depth + 1) for v in node.values]
-            # Track constants in environment for deterministic evaluation
-            for i, target in enumerate(node.targets):
-                if i < len(eval_vals) and isinstance(eval_vals[i], Literal):
-                    self.env[target.name] = eval_vals[i]
-                else:
-                    self.env[target.name] = None # Mark as unknown/symbolic
             return Assignment(node.is_local, node.targets, eval_vals)
-
-        elif isinstance(node, Identifier):
-            # Resolve proven constants, otherwise return symbolic Identifier
-            if node.name in self.env and self.env[node.name] is not None:
-                return self.env[node.name]
-            return node
 
         elif isinstance(node, BinaryOp):
             left = self.evaluate(node.left, depth + 1)
             right = self.evaluate(node.right, depth + 1)
             
-            # Constant Folding & String Reconstitution
+            # --- AGGRESSIVE CONSTANT FOLDING ---
             if isinstance(left, Literal) and isinstance(right, Literal):
                 try:
+                    # Force Python to solve the obfuscator's math formulas
+                    if left.type == 'NUMBER' and right.type == 'NUMBER':
+                        if node.op == '+': return Literal(left.value + right.value, 'NUMBER')
+                        if node.op == '-': return Literal(left.value - right.value, 'NUMBER')
+                        if node.op == '*': return Literal(left.value * right.value, 'NUMBER')
+                        if node.op == '/': 
+                            if right.value != 0: return Literal(left.value / right.value, 'NUMBER')
+                        if node.op == '%': 
+                            if right.value != 0: return Literal(left.value % right.value, 'NUMBER')
+                        if node.op == '^': return Literal(left.value ** right.value, 'NUMBER')
+                    
+                    # Force Python to piece broken strings back together
                     if node.op == '..':
-                        val = f'"{left.value.strip("\"\'")} {right.value.strip("\"\'")}"'.replace(" ", "")
-                        return Literal(val, 'STRING')
-                    elif node.op == '+':
-                        return Literal(left.value + right.value, 'NUMBER')
-                    elif node.op == '-':
-                        return Literal(left.value - right.value, 'NUMBER')
-                    elif node.op == '*':
-                        return Literal(left.value * right.value, 'NUMBER')
+                        l_str = str(left.value).strip("\"'[]=")
+                        r_str = str(right.value).strip("\"'[]=")
+                        return Literal(f'"{l_str}{r_str}"', 'STRING')
                 except Exception:
                     self.partial = True
             
             return BinaryOp(left, node.op, right)
 
+        elif isinstance(node, TableConstructor):
+            eval_fields = [self.evaluate(f, depth + 1) for f in node.fields]
+            return TableConstructor(eval_fields)
+
+        elif isinstance(node, IfStatement):
+            cond = self.evaluate(node.condition, depth + 1)
+            if_body = self.evaluate(node.if_body, depth + 1)
+            else_body = self.evaluate(node.else_body, depth + 1) if node.else_body else None
+            return IfStatement(cond, if_body, else_body)
+
+        elif isinstance(node, WhileLoop):
+            cond = self.evaluate(node.condition, depth + 1)
+            body = self.evaluate(node.body, depth + 1)
+            return WhileLoop(cond, body)
+
+        elif isinstance(node, ReturnStatement):
+            eval_vals = [self.evaluate(v, depth + 1) for v in node.values]
+            return ReturnStatement(eval_vals)
+
         elif isinstance(node, FunctionCall):
-            self.partial = True # Symbolic fallback for external functions
+            self.partial = True 
             eval_args = [self.evaluate(arg, depth + 1) for arg in node.args]
             return FunctionCall(node.func, eval_args)
 
-        elif isinstance(node, Literal):
-            return node
-
-        self.partial = True
         return node
-
