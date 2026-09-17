@@ -32,6 +32,35 @@ class Parser:
         return Block(stmts)
 
     def parse_statement(self):
+        # NEW: Parse Returns
+        if self.consume('KEYWORD', 'return'):
+            values = []
+            while True:
+                val = self.parse_expression()
+                if not val: break
+                values.append(val)
+                if not self.consume('PUNC', ','): break
+            return ReturnStatement(values)
+            
+        # NEW: Parse IF statements
+        if self.consume('KEYWORD', 'if'):
+            condition = self.parse_expression()
+            self.consume('KEYWORD', 'then')
+            if_body = self.parse()
+            else_body = None
+            if self.consume('KEYWORD', 'else'):
+                else_body = self.parse()
+            self.consume('KEYWORD', 'end')
+            return IfStatement(condition, if_body, else_body)
+
+        # NEW: Parse WHILE loops
+        if self.consume('KEYWORD', 'while'):
+            condition = self.parse_expression()
+            self.consume('KEYWORD', 'do')
+            body = self.parse()
+            self.consume('KEYWORD', 'end')
+            return WhileLoop(condition, body)
+
         if self.consume('KEYWORD', 'local'):
             return self.parse_assignment(is_local=True)
             
@@ -92,7 +121,23 @@ class Parser:
             return Literal(float(tok.value) if '.' in tok.value else int(tok.value), 'NUMBER')
         elif tok.type == 'STRING':
             self.pos += 1
-            return Literal(tok.value, 'STRING') 
+            return Literal(tok.value, 'STRING')
+            
+        # NEW: Parse Tables {}
+        elif tok.type == 'PUNC' and tok.value == '{':
+            self.pos += 1
+            fields = []
+            while self.peek() and not self.consume('PUNC', '}'):
+                start_pos = self.pos
+                field = self.parse_expression()
+                if field: fields.append(field)
+                self.consume('PUNC', ',')
+                self.consume('PUNC', ';')
+                # If we get stuck reading a weird table value, force forward
+                if self.pos == start_pos:
+                    self.pos += 1
+            return TableConstructor(fields)
+            
         elif tok.type == 'IDENT':
             self.pos += 1
             ident = Identifier(tok.value)
@@ -113,3 +158,4 @@ class Parser:
                 return FunctionCall(ident, args)
             return ident
         return None
+
