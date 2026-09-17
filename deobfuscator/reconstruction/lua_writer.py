@@ -2,13 +2,19 @@ from ..parser.ast import *
 
 class LuaWriter:
     def __init__(self):
-        self.output = []
+        self.indent_level = 0
+
+    def get_indent(self):
+        return "    " * self.indent_level
 
     def write(self, node):
         if isinstance(node, Block):
+            lines = []
             for stmt in node.statements:
-                self.output.append(self.visit(stmt))
-            return "\n".join(filter(None, self.output))
+                result = self.visit(stmt)
+                if result:
+                    lines.append(self.get_indent() + result)
+            return "\n".join(lines)
         return self.visit(node)
 
     def visit(self, node):
@@ -16,22 +22,30 @@ class LuaWriter:
             prefix = "local " if node.is_local else ""
             targets = ", ".join(t.name for t in node.targets)
             if node.values:
-                vals = ", ".join(self.visit(v) for v in node.values)
+                vals = ", ".join(self.visit(v) if v else "nil" for v in node.values)
                 return f"{prefix}{targets} = {vals}"
             return f"{prefix}{targets}"
             
         elif isinstance(node, Literal):
+            # Ensures strings maintain their quotes in the final file
+            if node.type == 'STRING':
+                val = str(node.value)
+                if not (val.startswith('"') or val.startswith("'") or val.startswith("[")):
+                    return f'"{val}"'
             return str(node.value)
             
         elif isinstance(node, Identifier):
             return node.name
             
         elif isinstance(node, BinaryOp):
-            return f"{self.visit(node.left)} {node.op} {self.visit(node.right)}"
+            left = self.visit(node.left) if node.left else "nil"
+            right = self.visit(node.right) if node.right else "nil"
+            return f"{left} {node.op} {right}"
             
         elif isinstance(node, FunctionCall):
-            func_name = self.visit(node.func)
-            args = ", ".join(self.visit(a) for a in node.args)
+            func_name = self.visit(node.func) if node.func else "unknown_func"
+            args = ", ".join(self.visit(a) if a else "nil" for a in node.args)
             return f"{func_name}({args})"
             
-        return "-- [UNRESOLVED NODE]"
+        # If it hits a structure it doesn't know yet, leave a clean comment instead of breaking formatting
+        return "\n-- [Skipped complex or unresolved code block here]\n"
